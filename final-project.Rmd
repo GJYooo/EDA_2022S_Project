@@ -1,0 +1,368 @@
+---
+title: "출근길에 보는 자료"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(dplyr)
+library(rvest)
+library(stringr)
+library(jsonlite)
+library(kableExtra)
+library(formattable)
+library(reticulate)
+## 날짜 및 시간 설정
+now <- Sys.time()
+today <- format(Sys.time(), "%Y.%m.%d.")
+yesterday <- format(Sys.Date()-1, "%Y.%m.%d.")
+startday <- format(Sys.Date()-8, "%Y.%m.%d.")
+```
+
+Column {data-width=500 .tabset}
+-----------------------------------------------------------------------
+
+### Top NFT collections over 24 hours
+실시간 현황(as of `r now`)
+
+```{r}
+
+
+URL <- "https://opensea.io/rankings"
+res <- read_html(URL)
+
+pattern <- "#__NEXT_DATA__"
+D <- res %>% 
+  html_nodes(pattern) %>% 
+  html_text()
+
+
+data <- fromJSON(D)
+
+# 콜렉션 이름, 거래량, 바닥가격 등 정보 가져오기
+
+collection_name <- data$props$relayCache[[1]][[2]]$data$rankings$edges$node$name
+volume <- data$props$relayCache[[1]][[2]]$data$rankings$edges$node$statsV2$sevenDayVolume$unit %>% 
+  as.numeric() %>% 
+  round(digit=2)# 7dlfrk
+fp_unit <- data$props$relayCache[[1]][[2]]$data$rankings$edges$node$statsV2$floorPrice$unit %>%
+  as.numeric() %>% 
+  round(digit=2)
+native <-  data$props$relayCache[[1]][[2]]$data$rankings$edges$node$nativePaymentAsset$symbol
+fp_eth <- data$props$relayCache[[1]][[2]]$data$rankings$edges$node$statsV2$floorPrice$eth %>%
+  as.numeric() %>% 
+  round(digit=2)
+id_url <- data$props$relayCache[[1]][[2]]$data$rankings$edges$node$slug
+url <- str_c("https://opensea.io/collection/", id_url)
+rankings <- row.names(data$props$relayCache[[1]][[2]]$data$rankings$edges$node$nativePaymentAsset)
+
+tab <- data.frame(cbind(rankings, collection_name, volume, fp_unit, native, fp_eth, url), row.names=rankings)
+
+df <- tab %>%
+  mutate(collection = cell_spec(collection_name, "html", link = url, color="#062872")) %>%
+  select(-url, -collection_name)
+
+
+df[,c(1, 6, 2, 3, 4, 5)] %>% head(30) %>%
+  kable(format="html", escape=FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+
+```
+
+### Major cryptocurrencies
+실시간 현황(as of `r now`)
+```{r}
+
+api_key <- "23f80b96-1818-48fb-8ecd-b2030d4201ee"
+
+api <- "https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest"
+
+url <- str_c(api,"?CMC_PRO_API_KEY=", api_key, "&convert=KRW")
+res <- fromJSON(url)
+
+df.json <- res$data
+
+tab_KRW <- data.frame(cbind(df.json$name, df.json$symbol, df.json$quote$KRW$price, df.json$quote$KRW$market_cap))
+
+tab_KRW$X3 <- tab_KRW$X3 %>%
+  as.numeric() %>%
+  comma(, format='d')
+
+tab_KRW$X4 <- tab_KRW$X4 %>%
+  as.numeric() %>%
+  comma() %>% 
+  round()
+
+tab_KRW <- tab_KRW %>% 
+  arrange(desc(X4))
+
+
+names(tab_KRW) <- c("Name","Ticker","Price_KRW", "Marketcap_KRW")
+
+url <- str_c(api,"?CMC_PRO_API_KEY=", api_key)
+res <- fromJSON(url)
+
+df.json <- res$data
+
+tab_USD <- data.frame(cbind(df.json$name, df.json$symbol, df.json$quote$USD$price, df.json$quote$USD$market_cap))
+
+tab_USD$X3 <- tab_USD$X3 %>%
+  as.numeric() %>%
+  comma(, format='d')
+
+tab_USD$X4 <- tab_USD$X4 %>%
+  as.numeric() %>%
+  comma() %>% 
+  round()
+
+tab_USD <- tab_USD %>% 
+  arrange(desc(X4))
+
+names(tab_USD) <- c("Name","Ticker","Price_USD", "Marketcap_USD")
+
+df <- merge(tab_KRW, tab_USD, by = c("Name", "Ticker"))
+
+df <- df %>% 
+  arrange(desc(Marketcap_USD))
+
+df %>% 
+  head(30) %>%
+  kable(format="html", escape=FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+```
+
+### Stock Market
+주요 주가지수 전일자 동향(as of `r yesterday`)
+```{r}
+fdr <- import('FinanceDataReader')
+
+dji <- fdr$DataReader('DJI', startday, yesterday) %>%
+  tail(1) %>%
+  as.data.frame(, row.names="다우존스")
+
+kospi <- fdr$DataReader('KS11', startday, yesterday) %>% 
+  tail(1) %>% 
+  as.data.frame(, row.names="코스피")
+
+kosdaq <- fdr$DataReader('KQ11', startday, yesterday) %>% 
+  tail(1) %>% 
+  as.data.frame(, row.names="코스닥")
+
+nasdaq <- fdr$DataReader('IXIC', startday, yesterday) %>% 
+  tail(1) %>% 
+  as.data.frame(, row.names="나스닥")
+
+snp <-  fdr$DataReader('US500', startday, yesterday) %>% 
+  tail(1) %>% 
+  as.data.frame(, row.names="S&P500")
+
+hangseng <- fdr$DataReader('HK50', startday, yesterday) %>% 
+  tail(1) %>% 
+  as.data.frame(, row.names="항셍")
+
+sanghai <- fdr$DataReader('SSEC', startday, yesterday) %>% 
+  tail(1) %>% 
+  as.data.frame(, row.names="상해종합")
+
+ftse <- fdr$DataReader('UK100', startday, yesterday) %>% 
+  tail(1) %>% 
+  as.data.frame(, row.names="영국FTSE")
+
+nikkei <- fdr$DataReader('JP225', startday, yesterday) %>% 
+  tail(1) %>% 
+  as.data.frame(, row.names="니케이")
+
+dax <- fdr$DataReader('DE30', startday, yesterday) %>% 
+  tail(1) %>% 
+  as.data.frame(, row.names="독일 DAX")
+
+df <- rbind(kospi, kosdaq, nasdaq, dji, snp, hangseng, sanghai, ftse, nikkei, dax) %>% 
+  mutate(Volume = comma(Volume)) %>% 
+  kable(format="html", escape=FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+df
+```
+### FX
+외환시장 전일자 동향(as of `r yesterday`)
+``` {r}
+fdr <- import('FinanceDataReader')
+
+usdkrw <- fdr$DataReader('USD/KRW', startday, yesterday) %>%
+  tail(1) %>%
+  as.data.frame(, row.names="USD/KRW")
+
+usdjpy <- fdr$DataReader('USD/JPY', startday, yesterday) %>% 
+  tail(1) %>% 
+  as.data.frame(, row.names="USD/JPY")
+
+cnykrw <- fdr$DataReader('CNY/KRW', startday, yesterday) %>% 
+  tail(1) %>% 
+  as.data.frame(, row.names="CNY/KRW")
+
+eurusd <-  fdr$DataReader('EUR/USD', startday, yesterday) %>% 
+  tail(1) %>% 
+  as.data.frame(, row.names="EUR/USD")
+
+jpykrw <- fdr$DataReader('JPY/KRW', startday, yesterday) %>% 
+  tail(1) %>% 
+  as.data.frame(, row.names="JPY/KRW")
+
+audusd <- fdr$DataReader('AUD/USD', startday, yesterday) %>% 
+  tail(1) %>% 
+  as.data.frame(, row.names="AUD/USD")
+
+eurjpy <- fdr$DataReader('EUR/JPY', startday, yesterday) %>% 
+  tail(1) %>% 
+  as.data.frame(, row.names="EUR/JPY")
+
+usdrub <- fdr$DataReader('USD/RUB', startday, yesterday) %>% 
+  tail(1) %>% 
+  as.data.frame(, row.names="USD/RUB")
+
+df <- rbind(usdkrw, jpykrw, cnykrw, eurusd, usdjpy, audusd, eurjpy, usdrub ) %>% 
+  kable(format="html", escape=FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+df
+
+```
+
+
+Column {data-width=500 .tabset}
+-----------------------------------------------------------------------
+
+
+### News-Crypto
+
+```{r}
+URL <- "https://kr.investing.com/news/cryptocurrency-news"
+
+res <- read_html(URL)
+
+pattern <- "#leftColumn > div.largeTitle > article > div.textDiv > a"
+
+title <- res %>% 
+  html_nodes(pattern) %>% 
+  html_text()
+
+link <- res %>% 
+  html_nodes(pattern) %>% 
+  html_attr("href") %>% 
+  str_c("https://kr.investing.com/",.)
+
+tab <- cbind(today, title, link) %>% as_tibble()
+
+df <- tab %>%
+  mutate(title.link = cell_spec(title, "html", link = link, color="#062872")) %>%
+  select(today, title.link)
+
+names(df) <- c("Date", "Title")
+
+df %>%
+  kable(format="html", escape=FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+### News-정치
+```{r}
+URL <- "https://news.nate.com/recent?mid=n0201"
+
+res <- read_html(URL)
+#newsContents > div.postListType.noListTitle > div.postSubjectContent > div:nth-child(1) > div
+pattern <- "#newsContents > div.postListType.noListTitle > div.postSubjectContent > div > div > a > span.tb > strong"
+
+title <- res %>% 
+  html_nodes(pattern) %>% 
+  html_text()
+
+pattern <- "#newsContents > div.postListType.noListTitle > div.postSubjectContent > div > div > a"
+
+link <- res %>% 
+  html_nodes(pattern) %>% 
+  html_attr("href") %>% 
+  str_c("https:",.)
+
+tab <- cbind(today, title, link) %>% as_tibble()
+
+df <- tab %>%
+  mutate(title.link = cell_spec(title, "html", link = link, color="#062872")) %>%
+  select(today, title.link)
+
+names(df) <- c("Date", "Title")
+
+df %>%
+  kable(format="html", escape=FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+```
+
+### News-경제
+```{r}
+URL <- "https://news.nate.com/recent?mid=n0301"
+
+res <- read_html(URL)
+#newsContents > div.postListType.noListTitle > div.postSubjectContent > div:nth-child(1) > div
+pattern <- "#newsContents > div.postListType.noListTitle > div.postSubjectContent > div > div > a > span.tb > strong"
+
+title <- res %>% 
+  html_nodes(pattern) %>% 
+  html_text()
+
+pattern <- "#newsContents > div.postListType.noListTitle > div.postSubjectContent > div > div > a"
+
+link <- res %>% 
+  html_nodes(pattern) %>% 
+  html_attr("href") %>% 
+  str_c("https:",.)
+
+tab <- cbind(today, title, link) %>% as_tibble()
+
+df <- tab %>%
+  mutate(title.link = cell_spec(title, "html", link = link, color="#062872")) %>%
+  select(today, title.link)
+
+names(df) <- c("Date", "Title")
+
+df %>%
+  kable(format="html", escape=FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+```
+
+### News-사회
+```{r}
+URL <- "https://news.nate.com/recent?mid=n0401"
+
+res <- read_html(URL)
+#newsContents > div.postListType.noListTitle > div.postSubjectContent > div:nth-child(1) > div
+pattern <- "#newsContents > div.postListType.noListTitle > div.postSubjectContent > div > div > a > span.tb > strong"
+
+title <- res %>% 
+  html_nodes(pattern) %>% 
+  html_text()
+
+pattern <- "#newsContents > div.postListType.noListTitle > div.postSubjectContent > div > div > a"
+
+link <- res %>% 
+  html_nodes(pattern) %>% 
+  html_attr("href") %>% 
+  str_c("https:",.)
+
+tab <- cbind(today, title, link) %>% as_tibble()
+
+df <- tab %>%
+  mutate(title.link = cell_spec(title, "html", link = link, color="#062872")) %>%
+  select(today, title.link)
+
+names(df) <- c("Date", "Title")
+
+df %>%
+  kable(format="html", escape=FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+```
+
