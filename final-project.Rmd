@@ -231,7 +231,38 @@ df <- rbind(usdkrw, jpykrw, cnykrw, eurusd, usdjpy, audusd, eurjpy, usdrub ) %>%
 df
 
 ```
+### Fixed Income
 
+```{r}
+fdr <- import('FinanceDataReader')
+
+for (i in c(1, 2, 3, 5, 10, 20, 30, 50)) {
+  assign(str_c("kr", i), fdr$DataReader(str_c("KR",i,"YT=RR"), startday, yesterday))
+}
+
+for (i in c(1, 2, 3, 5, 10, 20, 30, 50)) {
+  assign((str_c("kr",i)), get(str_c("kr",i)) %>% 
+    tail(1) %>% 
+    as.data.frame(row.names=str_c("KTB ",i, "yr"))
+  )
+}
+
+df_KTB <- rbind(kr1, kr2, kr3, kr5, kr10, kr20, kr30, kr50)
+
+for (i in c("1M", "3M", "6M", "1Y", "2Y", "3Y", "5Y", "10Y", "30Y")) {
+  assign(str_c("UST", i), fdr$DataReader(str_c("US", i, "T=X"), startday, yesterday) %>% 
+           tail(1) %>% 
+           as.data.frame(row.names=str_c("UST", i)))
+}
+
+df_UST <- rbind(UST1M, UST3M, UST6M, UST1Y, UST2Y, UST3Y, UST5Y, UST10Y, UST30Y)
+
+df <- rbind(df_KTB, df_UST) %>% 
+  kable(format="html", escape=FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+df
+```
 
 Column {data-width=500 .tabset}
 -----------------------------------------------------------------------
